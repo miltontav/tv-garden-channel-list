@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TV Mundial</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #000;
+      color: white;
+      font-family: sans-serif;
+      overflow: hidden;
+    }
+    #topbar {
+      height: 50px;
+      background: #111;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      padding: 0 15px;
+    }
+    #searchWrapper {
+      position: relative;
+      width: 300px;
+    }
+    #channelSearch {
+      width: 100%;
+      padding: 8px 30px 8px 8px;
+      font-size: 1rem;
+      border-radius: 5px;
+      border: none;
+    }
+    #clearSearch {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      cursor: pointer;
+      font-weight: bold;
+      color: #888;
+      font-size: 18px;
+      user-select: none;
+      display: none;
+    }
+    #clearSearch:hover {
+      color: #ccc;
+    }
+    #app {
+      display: flex;
+      height: calc(100vh - 50px);
+      width: 100vw;
+    }
+    #sidebar {
+      width: 320px;
+      background: #111;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    #loadingMessage {
+      color: #aaa;
+      font-style: italic;
+      padding: 5px 10px;
+      margin-bottom: 10px;
+    }
+    #countryList {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .country {
+      background: #222;
+      padding: 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .country:hover {
+      background: #333;
+    }
+    .flag {
+      width: 24px;
+      height: 16px;
+      object-fit: cover;
+    }
+    #channels {
+      flex-grow: 1;
+      overflow-y: auto;
+      min-height: 0;
+      padding: 10px;
+    }
+    .channel {
+      background: #222;
+      padding: 5px;
+      margin: 5px 0;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .channel:hover {
+      background: #444;
+    }
+    #playerModal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.9);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    #playerModal.active {
+      display: flex;
+    }
+    #closePlayer {
+      position: absolute;
+      top: 10px;
+      right: 20px;
+      font-size: 2rem;
+      cursor: pointer;
+      color: white;
+      z-index: 1001;
+    }
+  </style>
+</head>
+<body>
+  <div id="topbar">
+    <div id="searchWrapper">
+      <input type="text" id="channelSearch" placeholder="Buscar canal o país...">
+      <span id="clearSearch">&times;</span>
+    </div>
+  </div>
+
+  <div id="app">
+    <div id="sidebar">
+      <h2>Canales</h2>
+      <div id="loadingMessage" style="display:none;">Cargando canales...</div>
+      <div id="countryList"></div>
+    </div>
+    <div id="channels"></div>
+  </div>
+
+  <div id="playerModal">
+    <div id="closePlayer">&times;</div>
+    <video id="tv" controls autoplay width="800" height="450"></video>
+  </div>
+
+  <!-- HLS.js para soporte .m3u8 en todos los navegadores -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+  <script>
+    const countries = [
+      { code: 'us', name: 'Estados Unidos' },
+      { code: 'mx', name: 'México' },
+      { code: 'ca', name: 'Canadá' },
+      { code: 'es', name: 'España' },
+      { code: 'ar', name: 'Argentina' },
+      { code: 'br', name: 'Brasil' },
+      { code: 'fr', name: 'France' },
+      { code: 'jp', name: 'Japan' },
+      { code: 'kr', name: 'Corea del Sur' },
+      { code: 'rd', name: 'Domininican Republic' },
+      { code: 'hi', name: 'Hindi' },
+      { code: 'sr', name: 'Serbio' },
+      { code: 'pr', name: 'Portugués' },
+      { code: 'uk', name: 'Ucraniano' },
+      { code: 'de', name: 'Alemania' },
+      { code: 'it', name: 'Italia' },
+      { code: 'ru', name: 'Rusia' },
+      { code: 'cn', name: 'China' },
+      { code: 'in', name: 'India' },
+      { code: 'eg', name: 'Egipto' },
+      { code: 'tr', name: 'Turquía' },
+      { code: 'za', name: 'Sudáfrica' },
+      { code: 'ng', name: 'Nigeria' },
+      { code: 'pt', name: 'Portugués' },
+      { code: 'se', name: 'Suecia' },
+      { code: 'no', name: 'Noruega' },
+      { code: 'fi', name: 'Finlandia' },
+      { code: 'dk', name: 'Dinamarca' },
+      { code: 'nl', name: 'Países Bajos' },
+      { code: 'be', name: 'Bélgica' },
+      { code: 'ch', name: 'Suiza' },
+      { code: 'at', name: 'Austria' },
+      { code: 'pl', name: 'Polonia' },
+      { code: 'gr', name: 'Grecia' },
+      { code: 'cz', name: 'República Checa' },
+      { code: 'hu', name: 'Hungría' },
+      { code: 'ro', name: 'Rumania' },
+      { code: 'bg', name: 'Bulgaria' },
+      { code: 'ru', name: 'Rusia' },
+      { code: 'ua', name: 'Ucrania' },
+      { code: 'il', name: 'Israel' }
+         
+    ];
+    
+    let allChannels = [];
+    const countryList = document.getElementById('countryList');
+    const channelsDiv = document.getElementById('channels');
+    const searchInput = document.getElementById('channelSearch');
+    const clearSearch = document.getElementById('clearSearch');
+    const loadingMessage = document.getElementById('loadingMessage');
+    const playerModal = document.getElementById('playerModal');
+    const closePlayer = document.getElementById('closePlayer');
+    const videoPlayer = document.getElementById('tv');
+    let hlsInstance = null;
+    let currentCountryCode = null;
+
+
+    // Render lista de países con banderas
+    countries.forEach(c => {
+      const div = document.createElement('div');
+      div.className = 'country';
+      div.innerHTML = `
+        <img class="flag" src="https://flagcdn.com/w40/${c.code}.png" alt="${c.name}">
+        <span>${c.name}</span>
+      `;
+      div.onclick = () => loadCountryChannels(c.code, c.name);
+      countryList.appendChild(div);
+    });
+
+    async function loadCountryChannels(code, name) {
+      if (currentCountryCode === code) {
+        // Si el mismo país fue clicado otra vez, limpiar lista
+        allChannels.length = 0;
+        currentCountryCode = null;
+        renderChannels([]);
+        searchInput.value = '';
+        clearSearch.style.display = 'none';
+        loadingMessage.style.display = 'none';
+        return;
+      }
+
+      currentCountryCode = code;
+
+      // Limpiar lista y mostrar mensaje de carga
+      allChannels.length = 0;
+      renderChannels([]);
+      searchInput.value = '';
+      clearSearch.style.display = 'none';
+      loadingMessage.style.display = 'block';
+
+      try {
+        const res = await fetch(`https://iptv-org.github.io/iptv/countries/${code}.m3u`);
+        const text = await res.text();
+        const newChannels = parseM3U(text).map(ch => ({ ...ch, country: name }));
+
+        allChannels.push(...newChannels);
+        loadingMessage.style.display = 'none';
+        renderChannels(allChannels);
+      } catch (e) {
+        loadingMessage.textContent = 'Error al cargar canales.';
+        console.error('Error al cargar canales de', name, e);
+      }
+    }
+
+    function parseM3U(text) {
+      const lines = text.split('\n');
+      const result = [];
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].startsWith('#EXTINF')) {
+          const name = lines[i].split(',')[1] || 'Sin nombre';
+          const url = lines[i + 1];
+          if (url) result.push({ name, url });
+          i++;
+        }
+      }
+      return result;
+    }
+
+    function renderChannels(list) {
+      channelsDiv.innerHTML = '';
+      list.forEach(ch => {
+        const div = document.createElement('div');
+        div.className = 'channel';
+        div.textContent = `${ch.name} (${ch.country})`;
+        div.onclick = () => {
+          playStream(ch.url);
+        };
+        channelsDiv.appendChild(div);
+      });
+    }
+
+    function playStream(url) {
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
+
+      if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+        videoPlayer.src = url;
+      } else if (Hls.isSupported()) {
+        hlsInstance = new Hls();
+        hlsInstance.loadSource(url);
+        hlsInstance.attachMedia(videoPlayer);
+      } else {
+        alert("Este navegador no soporta reproducción HLS");
+        return;
+      }
+
+      playerModal.classList.add('active');
+      videoPlayer.play().catch(() => {
+        console.warn("Reproducción bloqueada por el navegador.");
+      });
+    }
+
+    searchInput.addEventListener('input', () => {
+      const val = searchInput.value;
+      clearSearch.style.display = val.length > 0 ? 'block' : 'none';
+
+      const search = val.toLowerCase().trim();
+      if (search === '') {
+        renderChannels(allChannels);
+        return;
+      }
+      const filtered = allChannels.filter(ch =>
+        ch.name.toLowerCase().includes(search) || ch.country.toLowerCase().includes(search)
+      );
+      renderChannels(filtered);
+    });
+
+    clearSearch.onclick = () => {
+      searchInput.value = '';
+      clearSearch.style.display = 'none';
+      renderChannels(allChannels);
+      searchInput.focus();
+    };
+
+    closePlayer.onclick = () => {
+      playerModal.classList.remove('active');
+      videoPlayer.pause();
+    };
+  </script>
+</body>
+</html>
